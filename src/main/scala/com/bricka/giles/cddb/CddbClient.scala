@@ -15,6 +15,6 @@ object CddbClient {
     case class ExactCddbQueryResponse(category: String, discId: String, discTitle: String) extends CddbQueryResponse
     case class InexactCddbQueryResponse(responses: Seq[ExactCddbQueryResponse]) extends CddbQueryResponse
 
-    sealed case class CddbReadResponse()
+    sealed case class CddbReadResponse(discId: String, category: String, discTitle: String, discArtist: String, titles: Traversable[String])
   }
 }

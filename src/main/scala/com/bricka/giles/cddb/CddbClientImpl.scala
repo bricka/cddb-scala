@@ -63,6 +63,32 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
     }
   }
 
+  private def readResponseFromBodyLines(bodyLines: Array[String]): CddbReadResponse = {
+    val firstLineComponents = bodyLines.head.split(" ")
+    val category = firstLineComponents(1)
+    val discId = firstLineComponents(2)
+
+    var discTitle = ""
+    var discArtist = ""
+    val titles = new mutable.Queue[String]()
+
+    bodyLines.drop(1).foreach {
+      case DTITLE_REGEX(artist, title) => {
+        discTitle = title
+        discArtist = artist
+      }
+      case TITLE_REGEX(title) => titles += title
+    }
+
+    CddbReadResponse(
+      discId = discId,
+      category = category,
+      discTitle = discTitle,
+      discArtist = discArtist,
+      titles = titles.toSeq
+    )
+  }
+
   private def responseWithCmd(cmd: String): HttpResponse[String] = {
     val request = Http(cddbHttpPath)
       .param("cmd", cmd)
@@ -72,38 +98,6 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
     request.asString
   }
 
-  private def createCddbInfoFromSuccessfulCddbResponse(body: String): Option[CddbInfo] = {
-    var discIdOption: Option[String] = None
-    var titleOption: Option[String] = None
-    var artistOption: Option[String] = None
-    val titles = new mutable.Queue[String]
-
-    for (line <- body.split('\n')) {
-      line match {
-        case DISCID_REGEX(discId) => discIdOption = Some(discId)
-        case DTITLE_REGEX(artist, title) => {
-          artistOption = Some(artist)
-          titleOption = Some(title)
-        }
-        case TITLE_REGEX(title) => titles += title
-      }
-    }
-
-    for {
-      discId <- discIdOption
-      title <- titleOption
-      artist <- artistOption
-      if titles.nonEmpty
-    } yield {
-      new CddbInfo(discId, artist, title, titles.toSeq)
-    }
-  }
-
-  private def cddbReadCommand(category: String, discId: String): String = {
-    val commandElements = Seq("cddb", "read", category, discId)
-    commandElements.mkString("+")
-  }
-
   private def cddbHello: String = {
     val helloElements = Seq(sys.props.get("user.name").getOrElse("unknown"), "localhost", "giles", "1.0")
     helloElements.mkString("+")
@@ -111,7 +105,6 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
 }
 
 object CddbClientImpl {
-  private val DISCID_REGEX = """DISCID=(.*)""".r
   private val DTITLE_REGEX = """DTITLE=(.*) / (.*)""".r
   private val TITLE_REGEX = """TITLE\d+=(.*)""".r
 }
