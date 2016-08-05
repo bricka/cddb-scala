@@ -1,17 +1,18 @@
 package com.bricka.giles.cddb
 
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
 
 import scalaj.http.{Http, HttpResponse}
 
-class CddbClientImpl(cddbHttpPath: String) extends CddbClient {
+class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extends CddbClient {
   import CddbClientImpl._
 
-  override def query(discId: String, numTracks: Int, trackOffsets: Seq[Long], numSeconds: Int): Try[Option[CddbQueryResponse]] = {
+  override def query(discId: String, numTracks: Int, trackOffsets: Seq[Long], numSeconds: Int): Future[Option[CddbQueryResponse]] = Future {
     val queryResponse = responseWithCmd(s"cddb+query+${discId}+${numTracks}+${trackOffsets.mkString("+")}+${numSeconds}")
 
     if (queryResponse.isError) {
-      return new Failure(new Exception(s"Could not query CDDB: received error ${queryResponse.code}, body: ${queryResponse.body}"))
+      throw new Exception(s"Could not query CDDB: received error ${queryResponse.code}, body: ${queryResponse.body}")
     }
 
     val bodyLines = queryResponse.body.split("\n")
@@ -20,12 +21,12 @@ class CddbClientImpl(cddbHttpPath: String) extends CddbClient {
     val code = firstLine.split(" ").head
 
     code match {
-      case "200" => Success(Some(exactCddbQueryResponseFromLine(firstLine)))
-      case "211" => Success(Some(inexactCddbQueryResponseFromLines(bodyLines.drop(1))))
-      case "202" => Success(None)
-      case "403" => Failure(new Exception("CDDB Database Corrupted"))
-      case "409" => Failure(new Exception("Could not handshake with CDDB server"))
-      case _ => Failure(new Exception(s"Unknown CDDB error code: ${code}"))
+      case "200" => Some(exactCddbQueryResponseFromLine(firstLine))
+      case "211" => Some(inexactCddbQueryResponseFromLines(bodyLines.drop(1)))
+      case "202" => None
+      case "403" => throw new Exception("CDDB Database Corrupted")
+      case "409" => new Exception("Could not handshake with CDDB server")
+      case _ => new Exception(s"Unknown CDDB error code: ${code}")
     }
   }
 
