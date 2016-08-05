@@ -40,15 +40,7 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
   private def inexactCddbQueryResponseFromLines(lines: Array[String]): InexactCddbQueryResponse =
     InexactCddbQueryResponse(lines.map(_.split(" ")).map(exactCddbQueryResponseFromLine))
 
-  override def read(category: String, discId: String): Try[Option[CddbReadResponse]] = ???
-
-  override def getInfo(discId: String, numTracks: Int, trackOffsets: Seq[Long], numSeconds: Int): Option[CddbInfo] = {
-    val queryResponse = responseWithCmd(cddbQueryCommand(discId, numTracks, trackOffsets, numSeconds))
-
-    getCategoryForQueryResponse(queryResponse)
-      .map(category => responseWithCmd(cddbReadCommand(category, discId)))
-      .flatMap(createCddbInfoFromCddb(_))
-  }
+  override def read(category: String, discId: String): Future[Option[CddbReadResponse]] = ???
 
   private def responseWithCmd(cmd: String): HttpResponse[String] = {
     val request = Http(cddbHttpPath)
