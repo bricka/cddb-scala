@@ -6,6 +6,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scalaj.http.{Http, HttpResponse}
 
 class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extends CddbClient {
+  import CddbClient.response._
   import CddbClientImpl._
 
   override def query(discId: String, numTracks: Int, trackOffsets: Seq[Long], numSeconds: Int): Future[Option[CddbQueryResponse]] = Future {
@@ -28,6 +29,12 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
       case "409" => new Exception("Could not handshake with CDDB server")
       case _ => new Exception(s"Unknown CDDB error code: ${code}")
     }
+  }
+
+  private def exactCddbQueryResponseFromLine(line: String): ExactCddbQueryResponse = line.split(" ") match {
+    case Array(_, categ, discId, title) => ExactCddbQueryResponse(category = categ,
+                                                                  discId = discId,
+                                                                  discTitle = title)
   }
 
   override def read(category: String, discId: String): Try[Option[CddbReadResponse]] = ???
