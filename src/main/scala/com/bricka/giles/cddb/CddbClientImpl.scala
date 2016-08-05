@@ -7,6 +7,30 @@ import scalaj.http.{Http, HttpResponse}
 class CddbClientImpl(cddbHttpPath: String) extends CddbClient {
   import CddbClientImpl._
 
+  override def query(discId: String, numTracks: Int, trackOffsets: Seq[Long], numSeconds: Int): Try[Option[CddbQueryResponse]] = {
+    val queryResponse = responseWithCmd(s"cddb+query+${discId}+${numTracks}+${trackOffsets.mkString("+")}+${numSeconds}")
+
+    if (queryResponse.isError) {
+      return new Failure(new Exception(s"Could not query CDDB: received error ${queryResponse.code}, body: ${queryResponse.body}"))
+    }
+
+    val bodyLines = queryResponse.body.split("\n")
+
+    val firstLine = bodyLines.head
+    val code = firstLine.split(" ").head
+
+    code match {
+      case "200" => Success(Some(exactCddbQueryResponseFromLine(firstLine)))
+      case "211" => Success(Some(inexactCddbQueryResponseFromLines(bodyLines.drop(1))))
+      case "202" => Success(None)
+      case "403" => Failure(new Exception("CDDB Database Corrupted"))
+      case "409" => Failure(new Exception("Could not handshake with CDDB server"))
+      case _ => Failure(new Exception(s"Unknown CDDB error code: ${code}"))
+    }
+  }
+
+  override def read(category: String, discId: String): Try[Option[CddbReadResponse]] = ???
+
   override def getInfo(discId: String, numTracks: Int, trackOffsets: Seq[Long], numSeconds: Int): Option[CddbInfo] = {
     val queryResponse = responseWithCmd(cddbQueryCommand(discId, numTracks, trackOffsets, numSeconds))
 
@@ -22,27 +46,6 @@ class CddbClientImpl(cddbHttpPath: String) extends CddbClient {
       .param("proto", "1")
     println(s"Request = $request")
     request.asString
-  }
-
-  private def getCategoryForQueryResponse(response: HttpResponse[String]): Option[String] = {
-    if (response.code != 200) {
-      None
-    } else if (response.body.startsWith("200 ")) {
-      Some(response.body.split(' ')(1))
-    } else {
-      // TODO: Support multiple matches somehow
-      None
-    }
-  }
-
-  private def createCddbInfoFromCddb(response: HttpResponse[String]): Option[CddbInfo] = {
-    if (response.code != 200) {
-      None
-    } else if (!response.body.startsWith("210 ")) {
-      None
-    } else {
-      createCddbInfoFromSuccessfulCddbResponse(response.body)
-    }
   }
 
   private def createCddbInfoFromSuccessfulCddbResponse(body: String): Option[CddbInfo] = {
@@ -70,11 +73,6 @@ class CddbClientImpl(cddbHttpPath: String) extends CddbClient {
     } yield {
       new CddbInfo(discId, artist, title, titles.toSeq)
     }
-  }
-
-  private def cddbQueryCommand(discId: String, numTracks: Int, trackOffsets: Seq[Long], numSeconds: Int): String = {
-    val commandElements = Seq("cddb", "query", discId, numTracks.toString) ++ trackOffsets.map(_.toString) ++ Seq(numSeconds.toString)
-    commandElements.mkString("+")
   }
 
   private def cddbReadCommand(category: String, discId: String): String = {
