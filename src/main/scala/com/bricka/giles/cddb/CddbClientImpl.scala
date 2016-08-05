@@ -22,20 +22,23 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
     val code = firstLine.split(" ").head
 
     code match {
-      case "200" => Some(exactCddbQueryResponseFromLine(firstLine))
+      case "200" => Some(exactCddbQueryResponseFromLine(firstLine.split(" ").drop(1)))
       case "211" => Some(inexactCddbQueryResponseFromLines(bodyLines.drop(1)))
       case "202" => None
       case "403" => throw new Exception("CDDB Database Corrupted")
-      case "409" => new Exception("Could not handshake with CDDB server")
-      case _ => new Exception(s"Unknown CDDB error code: ${code}")
+      case "409" => throw new Exception("Could not handshake with CDDB server")
+      case _ => throw new Exception(s"Unknown CDDB error code: ${code}")
     }
   }
 
-  private def exactCddbQueryResponseFromLine(line: String): ExactCddbQueryResponse = line.split(" ") match {
-    case Array(_, categ, discId, title) => ExactCddbQueryResponse(category = categ,
-                                                                  discId = discId,
-                                                                  discTitle = title)
+  private def exactCddbQueryResponseFromLine(components: Array[String]): ExactCddbQueryResponse = components match {
+    case Array(categ, discId, title) => ExactCddbQueryResponse(category = categ,
+                                                               discId = discId,
+                                                               discTitle = title)
   }
+
+  private def inexactCddbQueryResponseFromLines(lines: Array[String]): InexactCddbQueryResponse =
+    InexactCddbQueryResponse(lines.map(_.split(" ")).map(exactCddbQueryResponseFromLine))
 
   override def read(category: String, discId: String): Try[Option[CddbReadResponse]] = ???
 

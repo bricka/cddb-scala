@@ -6,6 +6,8 @@ trait CddbClient {
 
 object CddbClient {
   object response {
-    case class ExactCddbQueryResponse(category: String, discId: String, discTitle: String)
+    sealed abstract class CddbQueryResponse
+    case class ExactCddbQueryResponse(category: String, discId: String, discTitle: String) extends CddbQueryResponse
+    case class InexactCddbQueryResponse(responses: Seq[ExactCddbQueryResponse]) extends CddbQueryResponse
   }
 }
