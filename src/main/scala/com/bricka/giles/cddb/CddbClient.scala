@@ -8,6 +8,8 @@ trait CddbClient {
 }
 
 object CddbClient {
+  case class CddbException(message: String, cause: Throwable = null) extends RuntimeException(message, cause)
+
   object response {
     sealed abstract class CddbQueryResponse
     case class ExactCddbQueryResponse(category: String, discId: String, discTitle: String) extends CddbQueryResponse

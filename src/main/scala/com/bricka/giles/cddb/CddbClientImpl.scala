@@ -6,6 +6,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scalaj.http.{Http, HttpResponse}
 
 class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extends CddbClient {
+  import CddbClient._
   import CddbClient.response._
   import CddbClientImpl._
 
@@ -13,7 +14,7 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
     val queryResponse = responseWithCmd(s"cddb+query+${discId}+${numTracks}+${trackOffsets.mkString("+")}+${numSeconds}")
 
     if (queryResponse.isError) {
-      throw new Exception(s"Could not query CDDB: received error ${queryResponse.code}, body: ${queryResponse.body}")
+      throw CddbException(s"Could not query CDDB: received error ${queryResponse.code}, body: ${queryResponse.body}")
     }
 
     val bodyLines = queryResponse.body.split("\n")
@@ -25,9 +26,9 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
       case "200" => Some(exactCddbQueryResponseFromLine(firstLine.split(" ").drop(1)))
       case "211" => Some(inexactCddbQueryResponseFromLines(bodyLines.drop(1)))
       case "202" => None
-      case "403" => throw new Exception("CDDB Database Corrupted")
-      case "409" => throw new Exception("Could not handshake with CDDB server")
-      case _ => throw new Exception(s"Unknown CDDB error code: ${code}")
+      case "403" => throw CddbException("CDDB Database Corrupted")
+      case "409" => throw CddbException("Could not handshake with CDDB server")
+      case _ => throw CddbException(s"Unknown CDDB error code: ${code}")
     }
   }
 
