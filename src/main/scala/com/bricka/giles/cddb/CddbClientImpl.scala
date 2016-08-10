@@ -10,27 +10,26 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
   import CddbClient.response._
   import CddbClientImpl._
 
-  override def query(discId: String, numTracks: Int, trackOffsets: Seq[Long], numSeconds: Int): Future[Option[CddbQueryResponse]] = Future {
-    val queryResponse = responseWithCmd(s"cddb+query+${discId}+${numTracks}+${trackOffsets.mkString("+")}+${numSeconds}")
+  override def query(discId: String, numTracks: Int, trackOffsets: Seq[Long], numSeconds: Int): Future[Option[CddbQueryResponse]] =
+    responseWithCmd(s"cddb+query+${discId}+${numTracks}+${trackOffsets.mkString("+")}+${numSeconds}").map { queryResponse =>
+      if (queryResponse.isError) {
+        throw CddbException(s"Could not query CDDB: received error ${queryResponse.code}, body: ${queryResponse.body}")
+      }
 
-    if (queryResponse.isError) {
-      throw CddbException(s"Could not query CDDB: received error ${queryResponse.code}, body: ${queryResponse.body}")
+      val bodyLines = queryResponse.body.split("\n")
+
+      val firstLine = bodyLines.head
+      val code = firstLine.split(" ").head
+
+      code match {
+        case "200" => Some(exactCddbQueryResponseFromLine(firstLine.split(" ").drop(1)))
+        case "211" => Some(inexactCddbQueryResponseFromLines(bodyLines.drop(1)))
+        case "202" => None
+        case "403" => throw CddbException("CDDB Database Corrupted")
+        case "409" => throw CddbException("Could not handshake with CDDB server")
+        case _ => throw CddbException(s"Unknown CDDB error code: ${code}")
+      }
     }
-
-    val bodyLines = queryResponse.body.split("\n")
-
-    val firstLine = bodyLines.head
-    val code = firstLine.split(" ").head
-
-    code match {
-      case "200" => Some(exactCddbQueryResponseFromLine(firstLine.split(" ").drop(1)))
-      case "211" => Some(inexactCddbQueryResponseFromLines(bodyLines.drop(1)))
-      case "202" => None
-      case "403" => throw CddbException("CDDB Database Corrupted")
-      case "409" => throw CddbException("Could not handshake with CDDB server")
-      case _ => throw CddbException(s"Unknown CDDB error code: ${code}")
-    }
-  }
 
   private def exactCddbQueryResponseFromLine(components: Array[String]): ExactCddbQueryResponse = components match {
     case Array(categ, discId, title) => ExactCddbQueryResponse(category = categ,
@@ -89,13 +88,14 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
     )
   }
 
-  private def responseWithCmd(cmd: String): HttpResponse[String] = {
+  private def responseWithCmd(cmd: String): Future[HttpResponse[String]] = {
     val request = Http(cddbHttpPath)
       .param("cmd", cmd)
       .param("hello", cddbHello)
       .param("proto", "1")
     println(s"Request = $request")
-    request.asString
+
+    Future { request.asString }
   }
 
   private def cddbHello: String = {
