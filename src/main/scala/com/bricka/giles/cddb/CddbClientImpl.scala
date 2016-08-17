@@ -5,9 +5,9 @@ import scala.concurrent.{ExecutionContext, Future}
 
 import scalaj.http.{Http, HttpResponse}
 
+import com.bricka.giles.cddb.response.{CddbQueryResponse, CddbReadResponse, ExactCddbQueryResponse, InexactCddbQueryResponse}
+
 class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extends CddbClient {
-  import CddbClient._
-  import CddbClient.response._
   import CddbClientImpl._
 
   override def query(discId: String, numTracks: Int, trackOffsets: Seq[Long], numSeconds: Int): Future[Option[CddbQueryResponse]] =
