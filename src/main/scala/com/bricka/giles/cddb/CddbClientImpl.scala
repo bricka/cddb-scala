@@ -40,27 +40,26 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
   private def inexactCddbQueryResponseFromLines(lines: Array[String]): InexactCddbQueryResponse =
     InexactCddbQueryResponse(lines.map(_.split(" ")).map(exactCddbQueryResponseFromLine))
 
-  override def read(category: String, discId: String): Future[Option[CddbReadResponse]] = Future {
-    val readResponse = responseWithCmd(s"cddb+read+${category}+${discId}")
+  override def read(category: String, discId: String): Future[Option[CddbReadResponse]] =
+    responseWithCmd(s"cddb+read+${category}+${discId}").map { readResponse =>
+      if (readResponse.isError) {
+        throw CddbException(s"Could not run read command on CDDB: received error ${readResponse.code}, body: ${readResponse.body}")
+      }
 
-    if (readResponse.isError) {
-      throw CddbException(s"Could not run read command on CDDB: received error ${readResponse.code}, body: ${readResponse.body}")
+      val bodyLines = readResponse.body.split("\n")
+
+      val firstLine = bodyLines.head
+      val code = firstLine.split(" ").head
+
+      code match {
+        case "210" => Some(readResponseFromBodyLines(bodyLines))
+        case "401" => None
+        case "402" => throw CddbException("Encountered server error when running read command on CDDB")
+        case "403" => throw CddbException("CDDB Database Corrupted")
+        case "409" => throw CddbException("Could not handshake with CDDB server")
+        case _ => throw CddbException(s"Unknown CDDB error code: ${code}")
+      }
     }
-
-    val bodyLines = readResponse.body.split("\n")
-
-    val firstLine = bodyLines.head
-    val code = firstLine.split(" ").head
-
-    code match {
-      case "210" => Some(readResponseFromBodyLines(bodyLines))
-      case "401" => None
-      case "402" => throw CddbException("Encountered server error when running read command on CDDB")
-      case "403" => throw CddbException("CDDB Database Corrupted")
-      case "409" => throw CddbException("Could not handshake with CDDB server")
-      case _ => throw CddbException(s"Unknown CDDB error code: ${code}")
-    }
-  }
 
   private def readResponseFromBodyLines(bodyLines: Array[String]): CddbReadResponse = {
     val firstLineComponents = bodyLines.head.split(" ")
