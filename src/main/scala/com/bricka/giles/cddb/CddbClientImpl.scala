@@ -10,8 +10,8 @@ import com.bricka.giles.cddb.response.{CddbQueryResponse, CddbReadResponse, Exac
 class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extends CddbClient {
   import CddbClientImpl._
 
-  override def query(discId: String, numTracks: Int, trackOffsets: Seq[Long], numSeconds: Int): Future[Option[CddbQueryResponse]] =
-    responseWithCmd(s"cddb+query+${discId}+${numTracks}+${trackOffsets.mkString("+")}+${numSeconds}").map { queryResponse =>
+  override def query(discId: String, trackOffsets: Seq[Long], numSeconds: Int): Future[Option[CddbQueryResponse]] =
+    responseWithCmd(s"cddb+query+${discId}+${trackOffsets.size}+${trackOffsets.mkString("+")}+${numSeconds}").map { queryResponse =>
       if (queryResponse.isError) {
         throw CddbException(s"Could not query CDDB: received error ${queryResponse.code}, body: ${queryResponse.body}")
       }
@@ -31,14 +31,22 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
       }
     }
 
-  private def exactCddbQueryResponseFromLine(components: Array[String]): ExactCddbQueryResponse = components match {
-    case Array(categ, discId, title) => ExactCddbQueryResponse(category = categ,
-                                                               discId = discId,
-                                                               discTitle = title)
+  private def exactCddbQueryResponseFromLine(components: Seq[String]): ExactCddbQueryResponse = components match {
+    case Seq(categ, discId, rest @ _ *) =>
+      val restParts = rest.mkString(" ").split(" / ")
+
+      ExactCddbQueryResponse(
+        category = categ,
+        discId = discId,
+        discTitle = restParts(1),
+        discArtist = restParts(0)
+      )
   }
 
   private def inexactCddbQueryResponseFromLines(lines: Array[String]): InexactCddbQueryResponse =
-    InexactCddbQueryResponse(lines.map(_.split(" ")).map(exactCddbQueryResponseFromLine))
+    InexactCddbQueryResponse(
+      lines.filterNot(_ == ".").map(_.split(" ").toSeq).map(exactCddbQueryResponseFromLine)
+    )
 
   override def read(category: String, discId: String): Future[Option[CddbReadResponse]] =
     responseWithCmd(s"cddb+read+${category}+${discId}").map { readResponse =>
@@ -68,14 +76,17 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
 
     var discTitle = ""
     var discArtist = ""
-    val titles = new mutable.Queue[String]()
+    val titlesByIndex = mutable.Map[Int, String]()
 
     bodyLines.drop(1).foreach {
       case DTITLE_REGEX(artist, title) => {
         discTitle = title
         discArtist = artist
       }
-      case TITLE_REGEX(title) => titles += title
+      case TITLE_REGEX(index, title) => {
+        titlesByIndex += (index.toInt -> title)
+      }
+      case _ =>
     }
 
     CddbReadResponse(
@@ -83,7 +94,7 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
       category = category,
       discTitle = discTitle,
       discArtist = discArtist,
-      titles = titles.toSeq
+      titles = titlesByIndex.toMap
     )
   }
 
@@ -92,7 +103,6 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
       .param("cmd", cmd)
       .param("hello", cddbHello)
       .param("proto", "1")
-    println(s"Request = $request")
 
     Future { request.asString }
   }
@@ -105,5 +115,5 @@ class CddbClientImpl(cddbHttpPath: String)(implicit ec: ExecutionContext) extend
 
 object CddbClientImpl {
   private val DTITLE_REGEX = """DTITLE=(.*) / (.*)""".r
-  private val TITLE_REGEX = """TITLE\d+=(.*)""".r
+  private val TITLE_REGEX = """TITLE(\d+)=(.*)""".r
 }
