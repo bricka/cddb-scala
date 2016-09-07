@@ -415,6 +415,27 @@ TITLE1=${title1}
         }
       }
     }
+
+    describe("discid") {
+      it("returns the correct discid") {
+        val trackOffsets = Seq(1L, 2L)
+        val numSeconds = 100
+
+        mockServer
+          .when(
+            request
+              .withMethod("GET")
+              .withQueryStringParameters(
+                new Parameter("cmd", discIdCommand(trackOffsets, numSeconds))
+              ),
+            Times.exactly(1)
+          )
+          .respond(
+            HttpResponse.response
+              .withBody("
+          )
+      }
+    }
   }
 }
 
